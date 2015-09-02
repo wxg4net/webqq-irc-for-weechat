@@ -6,7 +6,6 @@ use Encode::Locale;
 use Carp;
 use Parse::IRC;
 use Mojo::Webqq;
-use Data::Dumper;
 use Mojo::Util qw(md5_sum);
 use Mojo::IOLoop;
 use POSIX ();
@@ -200,20 +199,21 @@ sub ready {
                 $nick =~  s/\s//g; 
                 my $pre = substr($nick, 0, 12);
                 my $sender = "$msg->{sender_id}($pre)";
-                
+                my $conetnt = $msg->{content};
+                $conetnt =~  s/\n/[换行]/g; 
                 if ('group_message' eq $type) {
                     my $g = $qq->search_group(gid=>$msg->{group_id});
                     my $c = $s->add_virtual_client(id=>$msg->{group_id}, user=>$msg->{sender}->qq, nick=>$sender, name=>$client->{name});
-                    $s->send($client,fullname($c),"PRIVMSG", '#'.$g->gname, $msg->{content});
+                    $s->send($client,fullname($c),"PRIVMSG", '#'.$g->gname, $conetnt);
                 }
-                elsif ('message' eq $type) {
+                elsif ('message' eq $type or 'sess_message' eq $type) {
                     my $c = $s->add_virtual_client(id=>$msg->{sender_id}, user=>$msg->{sender}->qq, nick=>$sender, name=>$client->{name});
-                    $s->send($client,fullname($c),"PRIVMSG", $client->{nick}, $msg->{content});
+                    $s->send($client,fullname($c),"PRIVMSG", $client->{nick}, $conetnt);
                 }
                 else {
                     my $c = $s->add_virtual_client(id=>$msg->{sender_id}, user=>$msg->{sender}->qq, nick=>$sender, name=>$client->{name});
-                    $s->send($client,fullname($c),"PRIVMSG", $client->{nick}, $msg->{content});
-                    $qq->reply_message($msg,'你的消息已经被接受。但因为QQ软件限制，暂不能回复你的消息');
+                    $s->send($client,fullname($c),"PRIVMSG", $client->{nick}, $conetnt);
+                    $qq->reply_message($msg,'你的消息已经被接受。但因为QQ软件限制，可能无法回复你的消息');
                 }
             });
             $client->{qq} = $qq;
