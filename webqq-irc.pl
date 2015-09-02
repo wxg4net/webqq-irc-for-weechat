@@ -189,17 +189,32 @@ sub ready {
                 my $gname = $group->{gname};
                 $gname =~s/[\s|\(|\)]//g;
                 $gindex += 1;
-                $client->{qc}->{$gindex} = $group->{gid};
-                $client->{qc}->{$group->{gid}} = $gindex;
+                $client->{qc}->{$gindex} = ($group->{gid}, $gname);
+                $client->{qc}->{$group->{gid}} = ($gindex, $gname);
                 $s->send($client,$s->servername,"NOTICE",$client->{nick},'#'.$gname.' 已准备好');
             });
             $qq->on(receive_message=>sub{
                 my ($qq, $msg)=@_;
+                my $type = $msg->{type};
                 my $nick = $msg->{sender}->{nick};
                 $nick =~  s/\s//g; 
                 my $pre = substr($nick, 0, 12);
-                #my $c = $s->add_virtual_client(id=>$msg->{sender_id}, user=>$msg->{sender}->qq, nick=>$nick, name=>$client->{name});
-                $s->send($client,fullname($client),"PRIVMSG", "$msg->{sender_id}($pre)", $msg->{content});
+                my $sender = "$msg->{sender_id}($pre)";
+                
+                if ('group_message' eq $type) {
+                    my $g = $qq->search_group(gid=>$msg->{group_id});
+                    my $c = $s->add_virtual_client(id=>$msg->{group_id}, user=>$msg->{sender}->qq, nick=>$sender, name=>$client->{name});
+                    $s->send($client,fullname($c),"PRIVMSG", '#'.$g->gname, $msg->{content});
+                }
+                elsif ('message' eq $type) {
+                    my $c = $s->add_virtual_client(id=>$msg->{sender_id}, user=>$msg->{sender}->qq, nick=>$sender, name=>$client->{name});
+                    $s->send($client,fullname($c),"PRIVMSG", $client->{nick}, $msg->{content});
+                }
+                else {
+                    my $c = $s->add_virtual_client(id=>$msg->{sender_id}, user=>$msg->{sender}->qq, nick=>$sender, name=>$client->{name});
+                    $s->send($client,fullname($c),"PRIVMSG", $client->{nick}, $msg->{content});
+                    $qq->reply_message($msg,'你的消息已经被接受。但因为QQ软件限制，暂不能回复你的消息');
+                }
             });
             $client->{qq} = $qq;
         }
@@ -478,13 +493,16 @@ sub join_channel{
     else {
             #my $gid = first { $_->{gid} if $_->{gname} == $cid  } @{$qq->{group}};
             #my $gc = $client->{qc}->{$gid};
-        if (my @group = $qq->search_group_member(gname=>$cid)) {
-            $s->send($client,fullname($client),"JOIN",$channel_id);
-            $s->send($client,fullname($client),"TOPIC",$channel_id,$cid);
-            $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map { 
-                $_->{nick} =~  s/\s//g; 
-                "$_->{id}(".substr($_->{nick},0,12).")";
-            } @{group}));
+        if (my $group = $qq->search_group(gname=>$cid)) {
+            my $g = $client->{qc}->{$group->{gid}};
+            if (my @group = $qq->search_group_member(gname=>$cid)) {
+                $s->send($client,fullname($client),"JOIN",$channel_id);
+                $s->send($client,fullname($client),"TOPIC",$channel_id,$cid);
+                $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map { 
+                    $_->{nick} =~  s/\s//g; 
+                    "$_->{id}(".substr($_->{nick},0,12).")";
+                } @{group}));
+            }
         }
     }
   
