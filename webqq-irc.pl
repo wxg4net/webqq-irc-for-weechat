@@ -198,8 +198,8 @@ sub ready {
                 my $nick = $msg->{sender}->{nick};
                 $nick =~  s/\s//g; 
                 my $pre = substr($nick, 0, 12);
-                my $c = $s->add_virtual_client(id=>$msg->{sender_id}, user=>$msg->{sender}->qq, nick=>$nick, name=>$client->{name});
-                $s->send($c,fullname($c),"PRIVMSG", $client->{nick}, $msg->{content});
+                #my $c = $s->add_virtual_client(id=>$msg->{sender_id}, user=>$msg->{sender}->qq, nick=>$nick, name=>$client->{name});
+                $s->send($client,fullname($client),"PRIVMSG", "$msg->{sender_id}($pre)", $msg->{content});
             });
             $client->{qq} = $qq;
         }
