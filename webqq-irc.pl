@@ -109,7 +109,6 @@ sub ready {
             elsif($msg->{command} eq "NICK"){$s->emit(nick=>$client,$msg)}
             elsif($msg->{command} eq "USER"){$s->emit(user=>$client,$msg)}
             elsif($msg->{command} eq "JOIN"){$s->emit(join=>$client,$msg)}
-            elsif($msg->{command} eq "SEARCH"){$s->emit(search=>$client,$msg)}
             elsif($msg->{command} eq "PART"){$s->emit(part=>$client,$msg)}
             elsif($msg->{command} eq "PING"){$s->emit(ping=>$client,$msg)} 
             elsif($msg->{command} eq "PONG"){$s->emit(pong=>$client,$msg)} 
