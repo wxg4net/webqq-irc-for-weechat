@@ -477,32 +477,35 @@ sub join_channel{
     my $s =shift;
     my $client = shift;
     my $channel_id = shift;
-    $channel_id = "#".$channel_id if substr($channel_id,0,1) ne "#";
-    my $channel_name = substr($channel_id,1);
-    my $qq = $client->{qq};
+    my @channel_ids = split ',' , $channel_id;
+    foreach $channel_id (@channel_ids) {
+      $channel_id = "#".$channel_id if substr($channel_id,0,1) ne "#";
+      my $channel_name = substr($channel_id,1);
+      my $qq = $client->{qq};
+      
+      if ($channel_name == $client->{user}) {
+          $s->send($client,fullname($client),"JOIN",$channel_id);
+          $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map { 
+              $_->{nick} =~  s/\s//g; 
+              "$_->{id}(".substr($_->{nick},0,12).")";
+          } @{$qq->{friend}}));
+      }
+      else {
+          if (my $group = $qq->search_group(gname=>$channel_name)) {
+              if (my @group = $qq->search_group_member(gname=>$channel_name)) {
+                  $s->send($client,fullname($client),"JOIN",$channel_id);
+                  $s->send($client,fullname($client),"TOPIC",$channel_id, $channel_name);
+                  $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map { 
+                      $_->{nick} =~  s/\s//g; 
+                      "$_->{id}(".substr($_->{nick},0,12).")";
+                  } @group));
+              }
+          }
+      }
     
-    if ($channel_name == $client->{user}) {
-        $s->send($client,fullname($client),"JOIN",$channel_id);
-        $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map { 
-            $_->{nick} =~  s/\s//g; 
-            "$_->{id}(".substr($_->{nick},0,12).")";
-        } @{$qq->{friend}}));
-    }
-    else {
-        if (my $group = $qq->search_group(gname=>$channel_name)) {
-            if (my @group = $qq->search_group_member(gname=>$channel_name)) {
-                $s->send($client,fullname($client),"JOIN",$channel_id);
-                $s->send($client,fullname($client),"TOPIC",$channel_id, $channel_name);
-                $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map { 
-                    $_->{nick} =~  s/\s//g; 
-                    "$_->{id}(".substr($_->{nick},0,12).")";
-                } @group));
-            }
-        }
-    }
-  
-    $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
-    $s->info("[$client->{nick}] 加入频道 $channel_id");
+      $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
+      $s->info("[$client->{nick}] 加入频道 $channel_id");
+  }
 }
 
 sub add_client{
