@@ -109,6 +109,7 @@ sub ready {
             elsif($msg->{command} eq "NICK"){$s->emit(nick=>$client,$msg)}
             elsif($msg->{command} eq "USER"){$s->emit(user=>$client,$msg)}
             elsif($msg->{command} eq "JOIN"){$s->emit(join=>$client,$msg)}
+            elsif($msg->{command} eq "SEARCH"){$s->emit(search=>$client,$msg)}
             elsif($msg->{command} eq "PART"){$s->emit(part=>$client,$msg)}
             elsif($msg->{command} eq "PING"){$s->emit(ping=>$client,$msg)} 
             elsif($msg->{command} eq "PONG"){$s->emit(pong=>$client,$msg)} 
@@ -192,6 +193,15 @@ sub ready {
                 $client->{channel}{$gindex} = {id=>$group->gid, name=>$channel_group,in=>0};
                 $s->send($client,$s->servername,"NOTICE",$client->{nick},"频道 $channel_group 已准备好");
             });
+            
+            $qq->on(receive_friend_pic=>sub{
+                my($qq,$fh,$filepath,$friend)=@_;
+                my $newfile = $filepath.'-bak';
+                rename $filepath, $newfile;
+                my $c = $s->search_client(id=>$friend->{id});
+                $s->send($client,fullname($c),"PRIVMSG", $client->{nick}, "file:///".$newfile);
+            });
+            
             $qq->on(receive_message=>sub{
                 my ($qq, $msg)=@_;
                 my $type = $msg->{type};
@@ -217,6 +227,7 @@ sub ready {
                     $qq->reply_message($msg,'你的消息已经被接受。但因为QQ软件限制，可能无法回复你的消息');
                 }
             });
+            
             $client->{qq} = $qq;
         }
         else {
@@ -258,6 +269,15 @@ sub ready {
                     if (my $friend = $qq->search_friend(id=>$1)) {
                         $friend->send($3);
                     }
+                }
+                elsif ($content =~ /:(.+)/g) {
+                  my $key = $1;
+                  foreach my $friend (@{$qq->{friend}}) {
+                    if ($friend->{nick} =~ /$key/) {
+                      my $user = $friend->{id}."(".$friend->{nick}.")"; 
+                      $s->send($client,fullname($client),"PRIVMSG", $channel_id, $user);
+                    }
+                  }
                 }
             }
             elsif (my $group = $qq->search_group(gname=>$cid)) {
