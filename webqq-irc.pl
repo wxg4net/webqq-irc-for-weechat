@@ -19,7 +19,7 @@ has port => 6667;
 has network => "Webqq IRC NetWork";
 has ioloop => sub { Mojo::IOLoop->singleton };
 has parser => sub { Parse::IRC->new };
-has servername => "webqq";
+has servername => "Localhost";
 has clienthost => undef,
 has create_time => sub{POSIX::strftime( '%Y/%m/%d %H:%M:%S', localtime() )};
 has client => sub {[]};
@@ -73,7 +73,7 @@ sub ready {
             user=>  "",
             pass=>  "",
             qq=>  "",
-            qc=>  {}, # 群简码映射
+            qun=>  {}, # 群简码映射
             host=>  $stream->handle->peerhost,
             port=>  $stream->handle->peerport,
             nick=>  "*",
@@ -159,38 +159,38 @@ sub ready {
         #$client->{mode} = $msg->{params}[1]; 
         $client->{realname} = $msg->{params}[3]; 
 
-        if ($client->{user} and $client->{pass}) {
-            $s->send($client,$s->servername,"001",$client->{nick},"欢迎使用 Webqq  IRC Network " . fullname($client));
+        if ($client->{user} 
+            and $client->{pass}) {
+            $s->send($client,$s->servername,"001",$client->{nick},"欢迎使用 ".$s->network." " . fullname($client));
             my $qq = Mojo::Webqq->new(ua_debug=>0);
             my $h = $client->{stream}->handle;
             $qq->log->handle($h);
             $qq->log->format(sub {  
                 my $time = shift;
                 my $level = shift;
-                ":".$client->{host}." NOTICE * :" . join "\n", @_, '';   
+                ":".$s->servername." NOTICE * :" . join "\n", @_, '';   
             });
 
             my $pwd = md5_sum($client->{pass});
-            my $passport = $client->{user};
+            my $qqid = $client->{user};
 
-            $qq->login(qq=>$passport, pwd=>$pwd);
+            $qq->login(qq=>$qqid, pwd=>$pwd);
             $qq->ready();
-            #$qq->each_recent(sub{
-                #my($qq,$recent) = @_;
-                #if (my $friend = $qq->search_friend(id=>$recent->{id})) {
-                    #$s->send($client,$s->servername,"#$client->{user}", "$friend->{id}($friend->{nick})");
-                #}
-            #});
-            $s->send($client,$s->servername,"NOTICE",$client->{nick},'#'.$client->{user}.' 已准备好');
-            my $gindex = 0;
+            
+            
+            my $gindex = 1;
+            my $channel_friend = "#".$client->{user};
+            $client->{channel}{$gindex} = {id=>$gindex, name=>$channel_friend, in=>0};
+            $s->send($client,$s->servername,"NOTICE",$client->{nick},'频道 '.$channel_friend.' 已准备好');
+            
             $qq->each_group(sub{
                 my($qq,$group) = @_;
                 my $gname = $group->{gname};
                 $gname =~s/[\s|\(|\)]//g;
                 $gindex += 1;
-                $client->{qc}->{$gindex} = ($group->{gid}, $gname);
-                $client->{qc}->{$group->{gid}} = ($gindex, $gname);
-                $s->send($client,$s->servername,"NOTICE",$client->{nick},'#'.$gname.' 已准备好');
+                my $channel_group = '#'.$gname;
+                $client->{channel}{$gindex} = {id=>$group->gid, name=>$channel_group,in=>0};
+                $s->send($client,$s->servername,"NOTICE",$client->{nick},"频道 $channel_group 已准备好");
             });
             $qq->on(receive_message=>sub{
                 my ($qq, $msg)=@_;
@@ -200,13 +200,14 @@ sub ready {
                 my $pre = substr($nick, 0, 12);
                 my $sender = "$msg->{sender_id}($pre)";
                 my $conetnt = $msg->{content};
-                $conetnt =~  s/\n/[换行]/g; 
+                $conetnt =~  s/\n/:换行:/g; 
                 if ('group_message' eq $type) {
                     my $g = $qq->search_group(gid=>$msg->{group_id});
                     my $c = $s->add_virtual_client(id=>$msg->{group_id}, user=>$msg->{sender}->qq, nick=>$sender, name=>$client->{name});
                     $s->send($client,fullname($c),"PRIVMSG", '#'.$g->gname, $conetnt);
                 }
-                elsif ('message' eq $type or 'sess_message' eq $type) {
+                elsif ('message' eq $type 
+                          or 'sess_message' eq $type) {
                     my $c = $s->add_virtual_client(id=>$msg->{sender_id}, user=>$msg->{sender}->qq, nick=>$sender, name=>$client->{name});
                     $s->send($client,fullname($c),"PRIVMSG", $client->{nick}, $conetnt);
                 }
@@ -403,6 +404,7 @@ sub set_channel_mode{
     $s->send($client,$s->servername,"324",$client->{nick},$channel_id,$mode);
     $s->info("$channel_id 模式设置为: $client->{channel}{$channel_id}{mode}");
 }
+
 sub set_channel_topic{
     my $s = shift;
     my $client = shift;
@@ -420,6 +422,7 @@ sub set_channel_topic{
     $s->info("$channel_id 主题设置为: $client->{channel}{$channel_id}{topic}");
 
 }
+
 sub fullname{
     shift if ref $_[0] eq __PACKAGE__;
     my $client = shift;
@@ -440,6 +443,7 @@ sub quit{
     $s->info("[$client->{nick}] 已退出($quit_reason)");
     $s->del_client($client);
 }
+
 sub change_nick{
     my $s = shift;
     my $client = shift;
@@ -468,22 +472,16 @@ sub part_channel{
     }
     $s->info("[$client->{nick}] 离开频道 $channel_id");
 }
+
 sub join_channel{
     my $s =shift;
     my $client = shift;
     my $channel_id = shift;
     $channel_id = "#".$channel_id if substr($channel_id,0,1) ne "#";
-    my $cid = substr($channel_id,1);
+    my $channel_name = substr($channel_id,1);
     my $qq = $client->{qq};
-    my $channel = $s->search_channel(id=>$channel_id);
-    if(defined $channel){
-        $client->{channel}{$channel_id} = {id=>$channel_id,mode=>"i",topic=>$channel->{topic},ctime=>$channel->{ctime}};
-    }
-    else{
-        $client->{channel}{$channel_id} = {id=>$channel_id,mode=>"i",topic=>"欢迎来到频道 $channel_id",ctime=>time()};
-    }
     
-    if ($cid == $client->{user}) {
+    if ($channel_name == $client->{user}) {
         $s->send($client,fullname($client),"JOIN",$channel_id);
         $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map { 
             $_->{nick} =~  s/\s//g; 
@@ -491,25 +489,22 @@ sub join_channel{
         } @{$qq->{friend}}));
     }
     else {
-            #my $gid = first { $_->{gid} if $_->{gname} == $cid  } @{$qq->{group}};
-            #my $gc = $client->{qc}->{$gid};
-        if (my $group = $qq->search_group(gname=>$cid)) {
-            my $g = $client->{qc}->{$group->{gid}};
-            if (my @group = $qq->search_group_member(gname=>$cid)) {
+        if (my $group = $qq->search_group(gname=>$channel_name)) {
+            if (my @group = $qq->search_group_member(gname=>$channel_name)) {
                 $s->send($client,fullname($client),"JOIN",$channel_id);
-                $s->send($client,fullname($client),"TOPIC",$channel_id,$cid);
+                $s->send($client,fullname($client),"TOPIC",$channel_id, $channel_name);
                 $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map { 
                     $_->{nick} =~  s/\s//g; 
                     "$_->{id}(".substr($_->{nick},0,12).")";
-                } @{group}));
+                } @group));
             }
         }
     }
   
     $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
-    $s->send($client,$s->servername,"329",$client->{nick},$channel_id,$client->{channel}{$channel_id}{ctime} || time());
     $s->info("[$client->{nick}] 加入频道 $channel_id");
 }
+
 sub add_client{
     my $s = shift;  
     my $client = shift;
@@ -523,19 +518,6 @@ sub add_virtual_client {
     my %opt = @_;
     my $c = $s->search_client(id=>$opt{id});
     return $c if defined $c;
-    while(1){
-        my $c = $s->search_client(nick=>$opt{nick});
-        if(defined $c){
-            if($opt{nick}=~/\((\d+)\)$/){
-                my $num = $1;$num++;
-                $opt{nick} = $opt{nick} . "($num)";
-            }
-            else{
-                $opt{nick} = $opt{nick} . "(1)";
-            }   
-        }
-        else{last}
-    }
     my $virtual_client = {
         id      => $opt{id},
         name    => $opt{name},
@@ -550,6 +532,7 @@ sub add_virtual_client {
     $s->add_client($virtual_client);
     return $virtual_client;
 }
+
 sub del_client{
     my $s = shift;
     my $client = shift;
@@ -571,49 +554,6 @@ sub search_client {
     else{
         return first {my $c = $_;(first {$p{$_} ne $c->{$_}} grep {defined $p{$_}} keys %p) ? 0 : 1;} @{$s->client};
     }
-}
-
-sub each_channel {
-    my $s = shift;
-    my $callback = shift;
-    my %channel;
-    for my $c (@{$s->client}){
-        for my $channel_id (keys %{$c->{channel}}){
-            if(exists $channel{$channel_id}){
-                $channel{$channel_id}{count}++;
-            }
-            else{
-                $channel{$channel_id} = {id=>$channel_id,topic=>$c->{channel}{$channel_id}{topic} ,count=>1};
-            }
-        }
-    }
-    for(values %channel){
-        $callback->($s,$_);
-    }
-}
-
-sub search_channel {
-    my $s = shift;
-    my %p = @_;
-    return if 0 == grep {defined $p{$_}} keys %p;
-    my %channel;
-    for my $c (@{$s->client}){
-        for my $channel_id (keys %{$c->{channel}}){
-            if(exists $channel{$channel_id}){
-                $channel{$channel_id}{count}++;
-            }
-            else{
-                $channel{$channel_id} = {id=>$channel_id,ctime=>$c->{channel}{$channel_id}{ctime},topic=>$c->{channel}{$channel_id}{topic} ,count=>1};
-            }
-        }
-    }
-    if(wantarray){
-        return grep {my $c = $_;(first {$p{$_} ne $c->{$_}} grep {defined $p{$_}} keys %p) ? 0 : 1;} values %channel;
-    }
-    else{
-        return first {my $c = $_;(first {$p{$_} ne $c->{$_}} grep {defined $p{$_}} keys %p) ? 0 : 1;} values %channel;
-    } 
-
 }
 
 sub send {
