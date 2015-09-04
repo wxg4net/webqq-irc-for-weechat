@@ -265,7 +265,7 @@ sub ready {
             
             if ($cid == $client->{user}) {
                 if ($content =~ /(\d+)\((.*)\): *(.+)/g) {
-                    if (my $friend = $qq->search_friend(qq=>$1)) {
+                    if (my $friend = $qq->search_friend(id=>$1)) {
                         $friend->send($3);
                     }
                 }
@@ -282,11 +282,7 @@ sub ready {
             elsif (my $group = $qq->search_group(gname=>$cid)) {
                 $qq->send_group_message($group, $content);
             }
-            elsif ($cid =~ /(\d+)\((.*)\)/g) {
-                if (my $friend = $qq->search_friend(qq=>$1)) {
-                    $friend->send($3);
-                }
-            }
+            else { }
             
             $s->info({level=>"频道消息",title=>"$client->{nick}|$channel_id :"},$content);
         }
@@ -295,7 +291,9 @@ sub ready {
             my $content = $msg->{params}[1];
             
             if ($nick =~ /(\d+)\((.*)\)/g) {
-                if (my $friend = $qq->search_friend(qq=>$1)) {
+                my $friend;
+                if ($friend = $qq->search_friend(qq=>$1) 
+                    or $friend = $qq->search_friend(id=>$1)) {
                     $friend->send($content);
                     $s->info({level=>"私信消息",title=>"[$client->{nick}]->[$nick] :"},$content);
                     return;
