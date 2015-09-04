@@ -207,7 +207,7 @@ sub ready {
                 my $nick = $msg->{sender}->{nick};
                 $nick =~  s/\s//g; 
                 my $pre = substr($nick, 0, 12);
-                my $sender = "$msg->{sender_id}($pre)";
+                my $sender = $msg->{sender}->qq."($pre)";
                 my $conetnt = $msg->{content};
                 $conetnt =~  s/\n/:换行:/g; 
                 if ('group_message' eq $type) {
@@ -265,7 +265,7 @@ sub ready {
             
             if ($cid == $client->{user}) {
                 if ($content =~ /(\d+)\((.*)\): *(.+)/g) {
-                    if (my $friend = $qq->search_friend(id=>$1)) {
+                    if (my $friend = $qq->search_friend(qq=>$1)) {
                         $friend->send($3);
                     }
                 }
@@ -283,7 +283,7 @@ sub ready {
                 $qq->send_group_message($group, $content);
             }
             elsif ($cid =~ /(\d+)\((.*)\)/g) {
-                if (my $friend = $qq->search_friend(id=>$1)) {
+                if (my $friend = $qq->search_friend(qq=>$1)) {
                     $friend->send($3);
                 }
             }
@@ -295,7 +295,7 @@ sub ready {
             my $content = $msg->{params}[1];
             
             if ($nick =~ /(\d+)\((.*)\)/g) {
-                if (my $friend = $qq->search_friend(id=>$1)) {
+                if (my $friend = $qq->search_friend(qq=>$1)) {
                     $friend->send($content);
                     $s->info({level=>"私信消息",title=>"[$client->{nick}]->[$nick] :"},$content);
                     return;
